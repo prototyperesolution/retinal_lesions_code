@@ -39,8 +39,30 @@ def prep_seg_masks(img_paths, mask_size=896):
 
 
 
-def prepare_semantic_batch(img_paths):
-    print(os.path.split(img_paths[0]))
+def prepare_batch(img_paths, dataframe, masks=True, dr_grading=True, img_size = 896):
+    """returns a batch for training. This batch includes both semantic masks and DR gradings. One can be ignored if necessary"""
+    """going to experiment with using both the author's gradings and the kaggle gradings, then maybe some combo of the two"""
+    gradings = np.zeros((len(img_paths),1))
+    masks = prep_seg_masks(img_paths, img_size)
+    images = np.zeros((len(img_paths), img_size, img_size, 3))
+
+    for i in range(len(img_paths)):
+        image = cv2.imread(img_paths[i])
+        if image.shape != img_size:
+            image = cv2.resize(image, (img_size, img_size))
+        print(image.shape)
+        """cv2 defaults to reading images in BGR format"""
+        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        """normalising to between 0 and 1"""
+        image = image / 255
+        images[i] = image
+
+
+
+
 
 img_paths = get_paths('D:/phd stuff/retinal lesions/retinal-lesions-v20191227')[:10]
-test_masks = prep_seg_masks(img_paths)
+#test_masks = prep_seg_masks(img_paths)
+#print(test_masks.shape)
+prepare_batch(img_paths, 'a')
+
