@@ -42,7 +42,7 @@ def prep_seg_masks(img_paths, mask_size=896):
 
 
 
-def prepare_batch(img_paths, dataframe, masks=True, dr_grading=True, img_size = 896):
+def prepare_batch(img_paths, dataframe, img_size = 896):
     """returns a batch for training. This batch includes both semantic masks and DR gradings. One can be ignored if necessary"""
     """going to experiment with using both the author's gradings and the kaggle gradings, then maybe some combo of the two"""
     """the image paths do not have to be sequential, so can randomly choose batches"""

@@ -46,5 +46,37 @@ class Unet_UpSample(nn.Module):
         diffY = x2.size()[3] - x1.size()[3]
         x1 = F.pad(x1, (diffX // 2, diffX - diffX // 2,
                         diffY // 2, diffY - diffY // 2))
+        """format is batch_size, channels, h, w"""
         x = torch.cat([x2, x1], dim=1)
         return self.ConvBlock(x)
+
+class Unet(nn.Module):
+    def __init__(self, n_classes):
+        super(Unet, self).__init__()
+        self.n_classes = n_classes
+
+        self.down1 = Unet_DownSample(3, 64)
+        self.down2 = Unet_DownSample(64, 128)
+        self.down3 = Unet_DownSample(128,256)
+        self.down4 = Unet_DownSample(256, 512)
+        self.down5 = Unet_DownSample(512, 1024)
+
+        self.up1 = Unet_UpSample(1024, 512)
+        self.up2 = Unet_UpSample(512, 256)
+        self.up3 = Unet_UpSample(256, 128)
+        self.up4 = Unet_UpSample(128, 64)
+
+        self.out = nn.Conv2d(64, self.n_classes)
+
+    def forward(self, x):
+        x1 = self.inc(x)
+        x2 = self.down1(x1)
+        x3 = self.down2(x2)
+        x4 = self.down3(x3)
+        x5 = self.down4(x4)
+        x = self.up1(x5, x4)
+        x = self.up2(x, x3)
+        x = self.up3(x, x2)
+        x = self.up4(x, x1)
+        logits = self.outc(x)
+        return logits
