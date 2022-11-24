@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import numpy as np
 from src.utils import prepare_batch
 
@@ -37,3 +38,13 @@ class Unet_UpSample(nn.Module):
         super(Unet_UpSample, self).__init__()
         """out channels of the conv2dtranspose here is half number of in channels because we are concating relevant decoder layer"""
         self.upsample = nn.ConvTranspose2d(in_channels, in_channels//2, kernel_size=2, stride=2)
+        self.ConvBlock = Unet_ConvBlock(in_channels, out_channels)
+
+    def forward(self, x1, x2):
+        x1 = self.upsample(x1)
+        diffX = x2.size()[2] - x1.size()[2]
+        diffY = x2.size()[3] - x1.size()[3]
+        x1 = F.pad(x1, (diffX // 2, diffX - diffX // 2,
+                        diffY // 2, diffY - diffY // 2))
+        x = torch.cat([x2, x1], dim=1)
+        return self.ConvBlock(x)
