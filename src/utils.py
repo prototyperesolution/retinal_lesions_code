@@ -74,6 +74,9 @@ def prepare_batch(img_paths, dataframe, masks=True, dr_grading=True, img_size = 
 
     masks = prep_seg_masks(img_paths)
 
+    """need to transpose the data to be channel-first"""
+    images = np.transpose(images, (0,3,1,2))
+    masks = np.transpose(masks, (0,3,1,2))
     return images, masks, gradings
 
 
@@ -85,6 +88,6 @@ if __name__ == '__main__':
     #print(dataframe[:10])
     test_value = '4604_right'
 
-    test_index = (np.where(dataframe[:10,0] == test_value)[0])
+    #test_index = (np.where(dataframe[:10,0] == test_value)[0])
     #print(dataframe[test_index][0])
-    prepare_batch(img_paths, dataframe)
+    images, masks, _ = prepare_batch(img_paths, dataframe)
