@@ -4,7 +4,7 @@ import glob
 import numpy as np
 import pandas
 import pandas as pd
-
+import torch
 
 """utils for the dataset, including loading the images and masks for segmentation and loading the DR grades for 
 classification/regression"""
@@ -50,6 +50,8 @@ def prepare_batch(img_paths, dataframe, img_size = 896):
     #masks = prep_seg_masks(img_paths, img_size)
     images = np.zeros((len(img_paths), img_size, img_size, 3))
 
+
+    names_list = list(dataframe[:,0])
     for i in range(len(img_paths)):
         image = cv2.imread(img_paths[i])
         if image.shape != img_size:
@@ -63,10 +65,12 @@ def prepare_batch(img_paths, dataframe, img_size = 896):
         """returning relevant gradings from dataframe"""
         _, name = os.path.split(img_paths[i])
         name = name[:-4]
-        current_index = np.where(dataframe[:,0] == name)[0]
-
+        #current_index = np.where(dataframe[:,0] == name)[0].squeeze()
+        current_index = names_list.index(name)
         """using author's gradings, if changing to kaggle just change the 2 to 1"""
-        gradings[i] = dataframe[current_index,2]
+        #print(current_index)
+
+        gradings[i] = dataframe[current_index][2]
         #print('df ver')
         #print(dataframe[current_index][0][0])
         #print('name ver')
@@ -77,6 +81,10 @@ def prepare_batch(img_paths, dataframe, img_size = 896):
     """need to transpose the data to be channel-first"""
     images = np.transpose(images, (0,3,1,2))
     masks = np.transpose(masks, (0,3,1,2))
+
+    images = torch.from_numpy(images).float()
+    masks = torch.from_numpy(masks).int()
+
     return images, masks, gradings
 
 

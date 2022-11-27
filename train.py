@@ -27,7 +27,7 @@ args = parser.parse_args()
 def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, train_dataframe, test_img_paths, test_dataframe, criterion):
 
     test_ious, test_f1s, test_precisions = [],[],[]
-
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     for i in range(epochs):
         model.train()
@@ -39,18 +39,19 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
             batch_paths = train_img_paths[batch_indices]
 
             images, gt_masks, _ = prepare_batch(batch_paths, train_dataframe)
-
+            images = images.to(device)
+            gt_masks = gt_masks.to(device)
             logits = model(images)
-
             """softmaxing on the channels"""
-            logits = F.softmax(logits * 100, dim=1).squeeze()
+            logits = F.softmax(logits * 100, dim=1)
 
             """make the logits b,h,w,c and do the same for masks"""
-            logits = logits.transpose(0,2,3,1)
-            gt_masks = gt_masks.transpose(0,2,3,1)
+            #logits = logits.permute(0,3,1,2)
+            #gt_masks = gt_masks.permute(0,3,1,2)
 
-            tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits, gt_masks, mode='multilabel', threshold=0.5)
-            epoch_iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
+
+            #tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits, gt_masks, mode='multilabel', threshold=0.5)
+            #epoch_iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
             loss = criterion(logits.contiguous(), gt_masks)
             running_loss = running_loss * 0.99 + loss * 0.01
             loss.backward()
@@ -60,21 +61,21 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
             pbar.set_description(
                 f'Epoch={i}, Train_Loss={running_loss}')
 
-        val_iou, val_f1, val_precision = test_model(model, batch_size, test_img_paths, test_dataframe)
-        test_ious.append(val_iou)
-        test_f1s.append(val_f1)
-        test_precisions.append(val_precision)
+        #val_iou, val_f1, val_precision = test_model(model, batch_size, test_img_paths, test_dataframe)
+        #test_ious.append(val_iou)
+        #test_f1s.append(val_f1)
+        #test_precisions.append(val_precision)
 
-        print(f'Epoch {i} : Train Iou = {epoch_iou/batches_per_epoch} , Val IOU = {val_iou} \n Val F1 = {val_f1}, Val Precision = {val_precision}')
+        #print(f'Epoch {i} : Train Iou = {epoch_iou/batches_per_epoch} , Val IOU = {val_iou} \n Val F1 = {val_f1}, Val Precision = {val_precision}')
         torch.save(model.state_dict(), args.model_save_directory+f'/UNet_Epoch_{i}')
 
-        iou_np = np.expand_dims(np.array(test_ious), 0)
-        f1_np = np.expand_dims(np.array(test_f1s), 0)
-        precision_np = np.expand_dims(np.array(test_precisions), 0)
-        test_metrics = np.concatenate((iou_np, f1_np, precision_np), axis=0)
+        #iou_np = np.expand_dims(np.array(test_ious), 0)
+        #f1_np = np.expand_dims(np.array(test_f1s), 0)
+        #precision_np = np.expand_dims(np.array(test_precisions), 0)
+        #test_metrics = np.concatenate((iou_np, f1_np, precision_np), axis=0)
 
-        with open(args.results_save_directory+'/'+'test_results.npy', 'wb') as f:
-            np.save(f, test_metrics)
+        #with open(args.results_save_directory+'/'+'test_results.npy', 'wb') as f:
+        #    np.save(f, test_metrics)
 
 
 def predict_images(image):
@@ -129,19 +130,25 @@ if __name__ == '__main__':
     optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
     """using dice loss for multi-class semantic segmentation, https://arxiv.org/pdf/2006.14822.pdf"""
     criterion = JaccardLoss(mode='multilabel', from_logits=False)
-    all_img_paths = get_paths(args.dataset_dir)
-    all_img_paths = np.array(all_img_paths)
+
+
+    dataframe = pandas.read_csv(args.dataset_dir + '/dr_grades.csv').values
+    all_img_paths = dataframe[:,0].copy()
+    for j in range(len(all_img_paths)):
+        all_img_paths[j] = args.dataset_dir + '/images_896x896/' + all_img_paths[j] + '.jpg'
 
     train_img_paths = all_img_paths[:int(len(all_img_paths)*args.train_test_split)]
     test_img_paths = all_img_paths[int(len(all_img_paths)*args.train_test_split):]
 
-    dataframe = pandas.read_csv(args.dataset_dir + '/dr_grades.csv').values
+
     train_dataframe = dataframe[:int(len(all_img_paths)*args.train_test_split)]
 
-    print(train_dataframe)
+    names_list = list(dataframe[:,0])
+    #print(names_list)
+    #print('all names in dataframe')
 
     test_dataframe = dataframe[int(len(all_img_paths)*args.train_test_split):]
 
-    train_model(model, epochs = 100, batch_size = 16, batches_per_epoch = 300,
+    train_model(model, epochs = 100, batch_size = 1, batches_per_epoch = 300,
                 train_img_paths = train_img_paths, train_dataframe = train_dataframe,
                 test_img_paths = test_img_paths, test_dataframe = test_dataframe, criterion = criterion)

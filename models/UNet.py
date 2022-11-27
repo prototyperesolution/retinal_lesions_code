@@ -55,11 +55,13 @@ class Unet(nn.Module):
         super(Unet, self).__init__()
         self.n_classes = n_classes
 
-        self.down1 = Unet_DownSample(3, 64)
-        self.down2 = Unet_DownSample(64, 128)
-        self.down3 = Unet_DownSample(128,256)
-        self.down4 = Unet_DownSample(256, 512)
-        self.down5 = Unet_DownSample(512, 1024)
+        #self.inc = self.Unet_ConvBlock(3, 64)
+
+        self.inc = Unet_ConvBlock(3, 64)
+        self.down1 = Unet_DownSample(64, 128)
+        self.down2 = Unet_DownSample(128,256)
+        self.down3 = Unet_DownSample(256, 512)
+        self.down4 = Unet_DownSample(512, 1024)
 
         self.up1 = Unet_UpSample(1024, 512)
         self.up2 = Unet_UpSample(512, 256)
@@ -78,5 +80,5 @@ class Unet(nn.Module):
         x = self.up2(x, x3)
         x = self.up3(x, x2)
         x = self.up4(x, x1)
-        logits = self.outc(x)
+        logits = self.out(x)
         return logits
