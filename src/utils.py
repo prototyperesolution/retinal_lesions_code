@@ -47,7 +47,7 @@ def prepare_batch(img_paths, dataframe, img_size = 896):
     """going to experiment with using both the author's gradings and the kaggle gradings, then maybe some combo of the two"""
     """the image paths do not have to be sequential, so can randomly choose batches"""
     gradings = np.zeros((len(img_paths),1))
-    masks = prep_seg_masks(img_paths, img_size)
+    #masks = prep_seg_masks(img_paths, img_size)
     images = np.zeros((len(img_paths), img_size, img_size, 3))
 
     for i in range(len(img_paths)):
@@ -72,7 +72,7 @@ def prepare_batch(img_paths, dataframe, img_size = 896):
         #print('name ver')
         #print(name)
 
-    masks = prep_seg_masks(img_paths)
+    masks = prep_seg_masks(img_paths, img_size)
 
     """need to transpose the data to be channel-first"""
     images = np.transpose(images, (0,3,1,2))
