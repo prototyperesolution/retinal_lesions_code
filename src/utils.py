@@ -14,7 +14,7 @@ def get_paths(dataset_dir):
     img_paths = glob.glob(img_dir+'/*.jpg')
     return img_paths
 
-def prep_seg_masks(img_paths, mask_size=896):
+def prep_seg_masks(img_paths, mask_size=256):
     """finds the corresponding segmentation masks to each image and prepares them as one hot vectors"""
     """assuming here that intraretinal hemmorhage as described in the github is replaced by retinal hemmorage"""
     classes = ['microaneurysm', 'retinal_hemorrhage', 'hard_exudate', 'cotton_wool_spots',
@@ -31,6 +31,8 @@ def prep_seg_masks(img_paths, mask_size=896):
         current_mask = np.zeros((mask_size, mask_size, len(classes)))
         for mask_path in mask_paths:
             img = cv2.imread(mask_path)
+            if img.shape != mask_size:
+                img = cv2.resize(img, (mask_size, mask_size))
             one_hot = (img/255)[:,:,0]
             _, name = os.path.split(mask_path)
             name = name[:-4]
@@ -42,7 +44,7 @@ def prep_seg_masks(img_paths, mask_size=896):
 
 
 
-def prepare_batch(img_paths, dataframe, img_size = 896):
+def prepare_batch(img_paths, dataframe, img_size = 256):
     """returns a batch for training. This batch includes both semantic masks and DR gradings. One can be ignored if necessary"""
     """going to experiment with using both the author's gradings and the kaggle gradings, then maybe some combo of the two"""
     """the image paths do not have to be sequential, so can randomly choose batches"""

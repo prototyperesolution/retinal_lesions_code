@@ -46,13 +46,13 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
             logits = F.softmax(logits * 100, dim=1)
 
             """make the logits b,h,w,c and do the same for masks"""
-            #logits = logits.permute(0,3,1,2)
-            #gt_masks = gt_masks.permute(0,3,1,2)
+            logits = logits.permute(0,3,1,2)
+            gt_masks = gt_masks.permute(0,3,1,2)
 
 
-            #tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits, gt_masks, mode='multilabel', threshold=0.5)
-            #epoch_iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
-            loss = criterion(logits.contiguous(), gt_masks)
+            tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits.contiguous(), gt_masks.contiguous(), mode='multilabel', threshold=0.5)
+            epoch_iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
+            loss = criterion(logits.contiguous(), gt_masks.contiguous())
             running_loss = running_loss * 0.99 + loss * 0.01
             loss.backward()
             optimizer.step()
@@ -61,18 +61,18 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
             pbar.set_description(
                 f'Epoch={i}, Train_Loss={running_loss}')
 
-        #val_iou, val_f1, val_precision = test_model(model, batch_size, test_img_paths, test_dataframe)
-        #test_ious.append(val_iou)
-        #test_f1s.append(val_f1)
-        #test_precisions.append(val_precision)
+        val_iou, val_f1, val_precision = test_model(model, batch_size, test_img_paths, test_dataframe)
+        test_ious.append(val_iou)
+        test_f1s.append(val_f1)
+        test_precisions.append(val_precision)
 
-        #print(f'Epoch {i} : Train Iou = {epoch_iou/batches_per_epoch} , Val IOU = {val_iou} \n Val F1 = {val_f1}, Val Precision = {val_precision}')
+        print(f'Epoch {i} : Train Iou = {epoch_iou/batches_per_epoch} , Val IOU = {val_iou} \n Val F1 = {val_f1}, Val Precision = {val_precision}')
         torch.save(model.state_dict(), args.model_save_directory+f'/UNet_Epoch_{i}')
 
-        #iou_np = np.expand_dims(np.array(test_ious), 0)
-        #f1_np = np.expand_dims(np.array(test_f1s), 0)
-        #precision_np = np.expand_dims(np.array(test_precisions), 0)
-        #test_metrics = np.concatenate((iou_np, f1_np, precision_np), axis=0)
+        iou_np = np.expand_dims(np.array(test_ious), 0)
+        f1_np = np.expand_dims(np.array(test_f1s), 0)
+        precision_np = np.expand_dims(np.array(test_precisions), 0)
+        test_metrics = np.concatenate((iou_np, f1_np, precision_np), axis=0)
 
         #with open(args.results_save_directory+'/'+'test_results.npy', 'wb') as f:
         #    np.save(f, test_metrics)
@@ -127,7 +127,7 @@ if __name__ == '__main__':
     print('model loaded')
 
     """using Adam optimizer with small learning rate, as we are fine tuning the model """
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.0005)
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     """using dice loss for multi-class semantic segmentation, https://arxiv.org/pdf/2006.14822.pdf"""
     criterion = JaccardLoss(mode='multilabel', from_logits=False)
 
@@ -149,6 +149,6 @@ if __name__ == '__main__':
 
     test_dataframe = dataframe[int(len(all_img_paths)*args.train_test_split):]
 
-    train_model(model, epochs = 100, batch_size = 1, batches_per_epoch = 300,
+    train_model(model, epochs = 100, batch_size = 8, batches_per_epoch = 300,
                 train_img_paths = train_img_paths, train_dataframe = train_dataframe,
                 test_img_paths = test_img_paths, test_dataframe = test_dataframe, criterion = criterion)
