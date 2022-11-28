@@ -67,15 +67,15 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
         test_precisions.append(val_precision)
 
         print(f'Epoch {i} : Train Iou = {epoch_iou/batches_per_epoch} , Val IOU = {val_iou} \n Val F1 = {val_f1}, Val Precision = {val_precision}')
-        torch.save(model.state_dict(), args.model_save_directory+f'/UNet_Epoch_{i}')
+        torch.save(model.state_dict(), args.model_save_directory+f'/UNet_Epoch_{i}.pth')
 
         iou_np = np.expand_dims(np.array(test_ious), 0)
         f1_np = np.expand_dims(np.array(test_f1s), 0)
         precision_np = np.expand_dims(np.array(test_precisions), 0)
         test_metrics = np.concatenate((iou_np, f1_np, precision_np), axis=0)
 
-        #with open(args.results_save_directory+'/'+'test_results.npy', 'wb') as f:
-        #    np.save(f, test_metrics)
+        with open(args.results_save_directory+'/'+'test_results.npy', 'wb') as f:
+            np.save(f, test_metrics)
 
 
 def predict_images(image):
@@ -84,7 +84,7 @@ def predict_images(image):
 
 def test_model(model, batch_size, img_paths, dataframe):
     model.eval()
-
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     index = 0
     iou = 0
     f1 = 0
@@ -93,19 +93,25 @@ def test_model(model, batch_size, img_paths, dataframe):
         current_batch_size = min(batch_size, len(img_paths)-index)
         current_batch_paths = img_paths[index:index+current_batch_size]
         batch_images, gt_masks, _ = prepare_batch(current_batch_paths, dataframe)
+
+        batch_images = batch_images.to(device)
+        gt_masks = gt_masks.to(device)
+
         logits = model(batch_images)
         """softmaxing on the channels"""
         logits = F.softmax(logits * 100, dim=1).squeeze()
 
         """make the logits b,h,w,c and do the same for masks"""
-        logits = logits.transpose(0, 2, 3, 1)
-        gt_masks = gt_masks.transpose(0, 2, 3, 1)
+        logits = logits.permute(0, 3, 1, 2)
+        gt_masks = gt_masks.permute(0, 3, 1, 2)
 
-        tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits, gt_masks, mode='multilabel',
+        tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits.contiguous(), gt_masks.contiguous(), mode='multilabel',
                                                                        threshold=0.5)
         iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
         f1 += float(segmentation_models_pytorch.metrics.f1_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
         precision += float(segmentation_models_pytorch.metrics.precision(tp, fp, fn, tn, reduction="macro").cpu().numpy())
+
+        index += current_batch_size
 
     return iou/len(img_paths), f1/len(img_paths), precision/len(img_paths)
 
@@ -149,6 +155,6 @@ if __name__ == '__main__':
 
     test_dataframe = dataframe[int(len(all_img_paths)*args.train_test_split):]
 
-    train_model(model, epochs = 100, batch_size = 8, batches_per_epoch = 300,
+    train_model(model, epochs = 100, batch_size = 8, batches_per_epoch = 10,
                 train_img_paths = train_img_paths, train_dataframe = train_dataframe,
                 test_img_paths = test_img_paths, test_dataframe = test_dataframe, criterion = criterion)
