@@ -85,7 +85,7 @@ def prepare_batch(img_paths, dataframe, img_size = 256):
     masks = np.transpose(masks, (0,3,1,2))
 
     images = torch.from_numpy(images).float()
-    masks = torch.from_numpy(masks).int()
+    masks = torch.from_numpy(masks).float()
 
     return images, masks, gradings
 

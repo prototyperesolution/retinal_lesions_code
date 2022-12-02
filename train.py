@@ -16,6 +16,8 @@ from src.utils import get_paths, prepare_batch
 parser = argparse.ArgumentParser(description='Joseph Muddle\'s semantic segmentation model')
 parser.add_argument('--dataset_dir', type=str, default = 'D:/phd stuff/retinal lesions/retinal-lesions-v20191227', help='root dir for the data')
 parser.add_argument('--model_checkpoint', type=str, default=None, help='dir for model training checkpoint')
+#parser.add_argument('--model_checkpoint', type=str, default='D:/phd stuff/retinal_lesion_code/retinal_lesions_code/model_checkpoints/UNet_checkpoints/UNet_epoch_61.pth',
+#                    help='dir for model training checkpoint')
 parser.add_argument('--num_classes', type=int, default=8, help='number of classes for the model')
 parser.add_argument('--train_test_split', type=float, default=0.8, help='ratio of train to test samples')
 parser.add_argument('--model_save_directory', type=str, default='D:/phd stuff/retinal_lesion_code/retinal_lesions_code/model_checkpoints/UNet_checkpoints',
@@ -24,17 +26,19 @@ parser.add_argument('--results_save_directory', type=str, default='D:/phd stuff/
                     help='where to save results')
 args = parser.parse_args()
 
-def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, train_dataframe, test_img_paths, test_dataframe, criterion):
+def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, train_dataframe, test_img_paths, test_dataframe, criterion, device):
 
     test_ious, test_f1s, test_precisions = [],[],[]
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     for i in range(epochs):
-        model.train()
+        print(model.training)
+        print(device)
         pbar = tqdm(range(0, batches_per_epoch))#
         epoch_iou = 0
         running_loss = 0
         for j in pbar:
+            model.train()
+            optimizer.zero_grad()
             batch_indices = np.random.randint(0,len(train_img_paths),batch_size)
             batch_paths = train_img_paths[batch_indices]
 
@@ -45,23 +49,19 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
             """softmaxing on the channels"""
             logits = F.softmax(logits * 100, dim=1)
 
-            """make the logits b,h,w,c and do the same for masks"""
-            logits = logits.permute(0,3,1,2)
-            gt_masks = gt_masks.permute(0,3,1,2)
 
-
-            tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits.contiguous(), gt_masks.contiguous(), mode='multilabel', threshold=0.5)
-            epoch_iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
+            tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits.contiguous(), gt_masks.int().contiguous(), mode='multilabel', threshold=0.5)
+            epoch_iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="macro-imagewise").cpu().numpy())
             loss = criterion(logits.contiguous(), gt_masks.contiguous())
-            running_loss = running_loss * 0.99 + loss * 0.01
+            running_loss += loss
             loss.backward()
             optimizer.step()
-            optimizer.zero_grad()
+
 
             pbar.set_description(
-                f'Epoch={i}, Train_Loss={running_loss}')
+                f'Epoch={i}, Train_Loss={running_loss/j}')
 
-        val_iou, val_f1, val_precision = test_model(model, batch_size, test_img_paths, test_dataframe)
+        val_iou, val_f1, val_precision = test_model(model, batch_size, test_img_paths, test_dataframe, device)
         test_ious.append(val_iou)
         test_f1s.append(val_f1)
         test_precisions.append(val_precision)
@@ -78,13 +78,29 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
             np.save(f, test_metrics)
 
 
-def predict_images(image):
-    output = F.one_hot(image.argmax(dim=0), image.shape[0])
-    return output
-
-def test_model(model, batch_size, img_paths, dataframe):
+def predict_images(model, image, gt_mask):
     model.eval()
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    image = image.cpu().numpy()
+    image = np.expand_dims(image, 0)
+    image = torch.from_numpy(image)
+    gt_mask = gt_mask.cpu().numpy()
+    gt_mask = np.expand_dims(gt_mask, 0)
+    gt_mask = torch.from_numpy(gt_mask)
+    logits = model(image)
+    logits = logits.cpu()
+    tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits.contiguous(), gt_mask.int().contiguous(),
+                                                                   mode='multilabel', threshold=0.5)
+    iou = float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction='macro-imagewise').cpu().numpy())
+    print(iou)
+    logits = F.softmax(logits * 100, dim=1)
+    logits = logits.permute(0,2,3,1)
+    logits = logits.cpu().detach().numpy()
+    logits = logits.squeeze()
+    return logits
+
+def test_model(model, batch_size, img_paths, dataframe, device):
+    model.eval()
+    print(model.training)
     index = 0
     iou = 0
     f1 = 0
@@ -99,17 +115,22 @@ def test_model(model, batch_size, img_paths, dataframe):
 
         logits = model(batch_images)
         """softmaxing on the channels"""
-        logits = F.softmax(logits * 100, dim=1).squeeze()
+        logits = F.softmax(logits*100, dim=1).squeeze()
 
         """make the logits b,h,w,c and do the same for masks"""
-        logits = logits.permute(0, 3, 1, 2)
-        gt_masks = gt_masks.permute(0, 3, 1, 2)
+        #logits = logits.permute(0, 3, 1, 2)
+        #gt_masks = gt_masks.permute(0, 3, 1, 2)
 
-        tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits.contiguous(), gt_masks.contiguous(), mode='multilabel',
+        #window_name = 'image'
+        #cv2.imshow(window_name, logits[0])
+        #cv2.waitkey(0)
+        #cv2.destroyAllWindows()
+
+        tp, fp, fn, tn = segmentation_models_pytorch.metrics.get_stats(logits.contiguous(), gt_masks.int().contiguous(), mode='multilabel',
                                                                        threshold=0.5)
-        iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
-        f1 += float(segmentation_models_pytorch.metrics.f1_score(tp, fp, fn, tn, reduction="micro").cpu().numpy())
-        precision += float(segmentation_models_pytorch.metrics.precision(tp, fp, fn, tn, reduction="macro").cpu().numpy())
+        iou += float(segmentation_models_pytorch.metrics.iou_score(tp, fp, fn, tn, reduction="macro-imagewise").cpu().numpy())
+        f1 += float(segmentation_models_pytorch.metrics.f1_score(tp, fp, fn, tn, reduction="macro-imagewise").cpu().numpy())
+        precision += float(segmentation_models_pytorch.metrics.precision(tp, fp, fn, tn, reduction="macro-imagewise").cpu().numpy())
 
         index += current_batch_size
 
@@ -125,14 +146,13 @@ if __name__ == '__main__':
 
     model = torch.nn.DataParallel(model)
     if args.model_checkpoint != None:
-        checkpoint = torch.load(args.model_checkpoint, map_location='cpu')['state_dict']
+        checkpoint = torch.load(args.model_checkpoint, map_location='cpu')#['state_dict']
         ckpt_filter = {k: v for k, v in checkpoint.items() if 'criterion.0.criterion.weight' not in k}
         model.load_state_dict(ckpt_filter, strict=False)
 
     model.to(device)
     print('model loaded')
 
-    """using Adam optimizer with small learning rate, as we are fine tuning the model """
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
     """using dice loss for multi-class semantic segmentation, https://arxiv.org/pdf/2006.14822.pdf"""
     criterion = JaccardLoss(mode='multilabel', from_logits=False)
@@ -154,7 +174,17 @@ if __name__ == '__main__':
     #print('all names in dataframe')
 
     test_dataframe = dataframe[int(len(all_img_paths)*args.train_test_split):]
-
-    train_model(model, epochs = 100, batch_size = 8, batches_per_epoch = 10,
+    train_model(model, epochs = 100, batch_size = 4, batches_per_epoch = 1000,
                 train_img_paths = train_img_paths, train_dataframe = train_dataframe,
-                test_img_paths = test_img_paths, test_dataframe = test_dataframe, criterion = criterion)
+                test_img_paths = test_img_paths, test_dataframe = test_dataframe, criterion = criterion,
+                device = device)
+    """
+
+    test_batch_images, gt_masks,_ = prepare_batch(test_img_paths[:2], test_dataframe)
+    logits = predict_images(model, test_batch_images[0], gt_masks[0])
+    #print(np.max(logits))
+    for i in range(0,logits.shape[-1]):
+        cv2.imshow('logits', (logits[:,:,i])/2+(gt_masks[0].permute(1,2,0).cpu().numpy()[:,:,i])/2)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+    """
