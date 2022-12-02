@@ -30,6 +30,8 @@ def train_model(model, epochs, batch_size, batches_per_epoch, train_img_paths, t
 
     test_ious, test_f1s, test_precisions = [],[],[]
 
+    batches_per_epoch = int((len(train_img_paths)*5)/batch_size)
+
     for i in range(epochs):
         print(model.training)
         print(device)
@@ -115,7 +117,7 @@ def test_model(model, batch_size, img_paths, dataframe, device):
 
         logits = model(batch_images)
         """softmaxing on the channels"""
-        logits = F.softmax(logits*100, dim=1).squeeze()
+        logits = F.softmax(logits*100, dim=1)
 
         """make the logits b,h,w,c and do the same for masks"""
         #logits = logits.permute(0, 3, 1, 2)
@@ -174,7 +176,7 @@ if __name__ == '__main__':
     #print('all names in dataframe')
 
     test_dataframe = dataframe[int(len(all_img_paths)*args.train_test_split):]
-    train_model(model, epochs = 100, batch_size = 4, batches_per_epoch = 1000,
+    train_model(model, epochs = 100, batch_size = 6, batches_per_epoch = 1000,
                 train_img_paths = train_img_paths, train_dataframe = train_dataframe,
                 test_img_paths = test_img_paths, test_dataframe = test_dataframe, criterion = criterion,
                 device = device)
